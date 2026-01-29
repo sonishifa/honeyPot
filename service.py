@@ -30,14 +30,27 @@ def parse_timestamp(ts_string: str) -> datetime:
         # This prevents the API from crashing during a demo
         return datetime.now(timezone.utc)
 
-async def process_incoming_message(payload: IncomingRequest) -> tuple[AgentResponse, FinalCallbackPayload | None]:
+# CHANGE: Input type hint changed to 'dict' to match main.py
+async def process_incoming_message(payload: dict) -> tuple[AgentResponse, FinalCallbackPayload | None]:
     """
     Core Logic: Detect -> Engage -> Extract -> Measure -> Report
     """
     
-    current_text = payload.message.text
-    history = payload.conversationHistory
-    session_id = payload.sessionId
+    # --- FIX: SAFE DICTIONARY ACCESS ---
+    # We use ["key"] instead of .key because main.py sends a dictionary now
+    
+    # 1. Get Message Object safely
+    msg_data = payload.get("message", {})
+    if isinstance(msg_data, str): # Handle edge case where it might be a string
+        current_text = msg_data
+        current_timestamp = datetime.now(timezone.utc).isoformat()
+    else:
+        current_text = msg_data.get("text", "")
+        current_timestamp = msg_data.get("timestamp", datetime.now(timezone.utc).isoformat())
+
+    # 2. Get History & Session
+    history = payload.get("conversationHistory", [])
+    session_id = payload.get("sessionId", "unknown_session")
     
     # --- STEP 1: SCAM DETECTION ---
     is_scam = False
@@ -65,6 +78,7 @@ async def process_incoming_message(payload: IncomingRequest) -> tuple[AgentRespo
 
     # --- STEP 3: ACTIVATE AGENT (The Persona) ---
     # This calls Google Gemini 2.5 Flash
+    # Note: agent.get_agent_response likely expects history as list of dicts, which is what we have.
     ai_result = agent.get_agent_response(history, current_text)
     
     # --- STEP 4: INTELLIGENCE EXTRACTION (Hybrid) ---
@@ -86,8 +100,12 @@ async def process_incoming_message(payload: IncomingRequest) -> tuple[AgentRespo
     
     if len(history) > 0:
         # Robust Time Calculation
-        first_msg_ts = parse_timestamp(history[0].timestamp)
-        current_msg_ts = parse_timestamp(payload.message.timestamp)
+        # FIX: Access history item as dict (item["timestamp"]) not object (item.timestamp)
+        first_msg = history[0]
+        first_ts_str = first_msg.get("timestamp") if isinstance(first_msg, dict) else getattr(first_msg, "timestamp", str(datetime.now()))
+        
+        first_msg_ts = parse_timestamp(first_ts_str)
+        current_msg_ts = parse_timestamp(current_timestamp)
         
         # Calculate difference in seconds
         delta = current_msg_ts - first_msg_ts
