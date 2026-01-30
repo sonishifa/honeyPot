@@ -73,7 +73,7 @@ def get_agent_response(history: list, current_text: str) -> dict:
     # 3. Call Gemini (Using 1.5-flash for stability)
     try:
         response = client.models.generate_content(
-            model='gemini-1.5-flash', 
+            model='gemini-2.5-flash-lite', 
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type='application/json',
