@@ -1,4 +1,4 @@
-from schemas import IncomingRequest, AgentResponse, EngagementMetrics, IntelligenceData, FinalCallbackPayload
+from schemas import IncomingRequest, AgentResponse, EngagementMetrics, IntelligenceData, FinalCallbackPayload, Message
 import utils
 import agent
 import requests 
@@ -6,10 +6,21 @@ from datetime import datetime, timezone
 
 CALLBACK_URL = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
 
-def parse_timestamp(ts_string: str) -> datetime:
+def parse_timestamp(ts_input) -> datetime:
+    """
+    Parses timestamps robustly. Handles String ISO format AND Integer Unix timestamps.
+    """
     try:
+        # 1. Handle Integer/Float (Unix Timestamp)
+        if isinstance(ts_input, (int, float)):
+            seconds = ts_input / 1000.0 if ts_input > 1e10 else ts_input
+            return datetime.fromtimestamp(seconds, timezone.utc)
+
+        # 2. Handle String
+        ts_string = str(ts_input)
         if ts_string.endswith('Z'):
             ts_string = ts_string[:-1] + '+00:00'
+        
         dt = datetime.fromisoformat(ts_string)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
@@ -18,23 +29,36 @@ def parse_timestamp(ts_string: str) -> datetime:
         return datetime.now(timezone.utc)
 
 async def process_incoming_message(payload: dict) -> tuple[AgentResponse, FinalCallbackPayload | None]:
-    # 1. EXTRACT DATA SAFELY (From Dictionary)
+    
+    # 1. EXTRACT DATA SAFELY
     msg_data = payload.get("message", {})
     if isinstance(msg_data, str): 
         current_text = msg_data
         current_timestamp = datetime.now(timezone.utc).isoformat()
     else:
         current_text = msg_data.get("text", "")
+        # Get raw timestamp (might be int or str)
         current_timestamp = msg_data.get("timestamp", datetime.now(timezone.utc).isoformat())
 
-    history = payload.get("conversationHistory", [])
     session_id = payload.get("sessionId", "unknown_session")
+    raw_history = payload.get("conversationHistory", [])
     
+    # --- Convert History to Objects for Agent ---
+    object_history = []
+    for h in raw_history:
+        try:
+            if isinstance(h, dict):
+                object_history.append(Message(**h)) 
+            else:
+                object_history.append(h)
+        except Exception:
+            continue
+
     # --- STEP 1: SCAM DETECTION ---
     is_scam = False
     scam_category = "None"
     
-    if len(history) > 0:
+    if len(raw_history) > 0:
         is_scam = True
         scam_category = "Ongoing Interaction"
     else:
@@ -52,8 +76,7 @@ async def process_incoming_message(payload: dict) -> tuple[AgentResponse, FinalC
         ), None
 
     # --- STEP 3: ACTIVATE AGENT ---
-    # History is a list of Dicts, Agent expects Dicts -> MATCH!
-    ai_result = agent.get_agent_response(history, current_text)
+    ai_result = agent.get_agent_response(object_history, current_text)
     
     # --- STEP 4: INTELLIGENCE ---
     regex_data = utils.extract_regex_data(current_text)
@@ -67,16 +90,20 @@ async def process_incoming_message(payload: dict) -> tuple[AgentResponse, FinalC
     )
 
     # --- STEP 5: METRICS ---
-    total_messages = len(history) + 1
+    total_messages = len(raw_history) + 1
     duration = 0
     
-    if len(history) > 0:
-        first_msg = history[0]
-        # Robust check for first timestamp
-        first_ts_str = first_msg.get("timestamp") if isinstance(first_msg, dict) else str(datetime.now())
-        
-        first_msg_ts = parse_timestamp(str(first_ts_str))
+    if len(raw_history) > 0:
+        first_msg = raw_history[0]
+        # Robust Access
+        if isinstance(first_msg, dict):
+            first_ts_val = first_msg.get("timestamp")
+        else:
+            first_ts_val = getattr(first_msg, "timestamp", datetime.now())
+            
+        first_msg_ts = parse_timestamp(first_ts_val)
         current_msg_ts = parse_timestamp(current_timestamp)
+        
         delta = current_msg_ts - first_msg_ts
         duration = int(delta.total_seconds())
 
@@ -95,9 +122,11 @@ async def process_incoming_message(payload: dict) -> tuple[AgentResponse, FinalC
 
     # --- STEP 7: CALLBACK ---
     callback_payload = None
-    found_info = (len(final_intel.bankAccounts) > 0 or len(final_intel.upiIds) > 0 or len(final_intel.phoneNumbers) > 0)
-    
-    if found_info or total_messages > 10:
+    if (len(final_intel.bankAccounts) > 0 or 
+        len(final_intel.upiIds) > 0 or
+        len(final_intel.phoneNumbers) > 0 or 
+        total_messages > 10):
+        
         callback_payload = FinalCallbackPayload(
             sessionId=session_id,
             scamDetected=True,
