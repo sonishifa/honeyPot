@@ -42,19 +42,38 @@ async def process_incoming_message(payload: dict) -> tuple[dict, FinalCallbackPa
     session_id = payload.get("sessionId", "unknown_session")
     raw_history = payload.get("conversationHistory", [])
     
-    # --- STEP 1: SCAM DETECTION ---
+ # --- STEP 1: SCAM DETECTION (keywords + history + regex intelligence) ---
+
+# 1A. Detect scam keywords in current message
     is_scam, scam_category = utils.detect_scam_keywords(current_text)
+
+# 1B. If current message looks safe, check scammer history
     if not is_scam:
         for msg in raw_history:
-            if msg.get("sender") == "scammer":
-                was_scam, scam_category = utils.detect_scam_keywords(msg.get("text", ""))
-                if was_scam: 
+            m_text = msg.get("text", "") if isinstance(msg, dict) else getattr(msg, "text", "")
+            m_sender = msg.get("sender", "") if isinstance(msg, dict) else getattr(msg, "sender", "")
+            if m_sender == "scammer":
+                was_scam, cat = utils.detect_scam_keywords(m_text)
+                if was_scam:
                     is_scam = True
+                    scam_category = cat
                     break
 
-    # --- STEP 2: PASSIVE MODE (Safe Messages) ---
+# 1C. Regex-based intelligence escalation (bank/upi/phone/link)
     if not is_scam:
-        return {"status": "success", "reply": "I'm not sure I understand. Can you explain?"}, None
+        regex_data = utils.extract_regex_data(current_text)
+        has_financial_data = any(len(v) > 0 for v in regex_data.values())
+    if has_financial_data:
+        is_scam = True
+        scam_category = "PatternDetected"
+
+# --- STEP 2: PASSIVE MODE (Safe Messages) ---
+    if not is_scam:
+        return {
+        "status": "success",
+        "reply": "I'm not sure I understand. Can you explain?"
+    }, None
+
 
     # --- STEP 3: ACTIVATE AGENT ---
     ai_result = agent.get_agent_response(raw_history, current_text)

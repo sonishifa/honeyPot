@@ -2,7 +2,7 @@ import re
 
 # --- MASTER SCAM DICTIONARY ---
 SCAM_KEYWORDS = {
-    "Financial": ["kyc", "pan card", "block", "suspend", "debit card", "credit card", "reward points", "redeem"],
+    "Financial": ["kyc", "pan card", "block", "suspend", "debit card", "credit card", "reward points", "redeem", "otp", "one time password", "verify", "verification"],
     "Urgency": ["immediately", "urgent", "24 hours", "today only", "legal action", "police", "arrest", "cbi", "illegal"],
     "Tech": ["apk", "teamviewer", "anydesk", "quicksupport", "screen share"],
     "Utilities": ["electricity", "power", "bill", "disconnect", "connection"],
