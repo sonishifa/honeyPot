@@ -14,7 +14,7 @@ SCAM_KEYWORDS = {
 PATTERNS = {
     "upi": r'[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}',
     # Bank Account: 11-18 digits (standard for most Indian banks)
-    "bank_account": r'\b\d{11,18}\b',
+    "bank_account": r'\b\d{9,18}\b',
     "link": r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+',
     # Phone: 10 digits starting with 6-9
     "phone": r'\b[6-9]\d{9}\b'

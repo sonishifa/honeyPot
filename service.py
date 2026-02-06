@@ -42,36 +42,43 @@ async def process_incoming_message(payload: dict) -> tuple[dict, FinalCallbackPa
     session_id = payload.get("sessionId", "unknown_session")
     raw_history = payload.get("conversationHistory", [])
     
- # --- STEP 1: SCAM DETECTION (keywords + history + regex intelligence) ---
-
-# 1A. Detect scam keywords in current message
+# --- STEP 1: SCAM DETECTION ---
     is_scam, scam_category = utils.detect_scam_keywords(current_text)
 
-# 1B. If current message looks safe, check scammer history
+# --- STEP 1.1: REGEX DETECTION (current message) ---
+    regex_data = utils.extract_regex_data(current_text)
+    if any(len(v) > 0 for v in regex_data.values()):
+        is_scam = True
+        scam_category = "FinancialPattern"
+
+# --- STEP 1.2: HISTORY ESCALATION ---
     if not is_scam:
         for msg in raw_history:
-            m_text = msg.get("text", "") if isinstance(msg, dict) else getattr(msg, "text", "")
             m_sender = msg.get("sender", "") if isinstance(msg, dict) else getattr(msg, "sender", "")
+            m_text = msg.get("text", "") if isinstance(msg, dict) else getattr(msg, "text", "")
+
             if m_sender == "scammer":
+            # keyword check
                 was_scam, cat = utils.detect_scam_keywords(m_text)
                 if was_scam:
                     is_scam = True
                     scam_category = cat
                     break
 
-# 1C. Regex-based intelligence escalation (bank/upi/phone/link)
-    regex_data = utils.extract_regex_data(current_text)
-    has_financial_data = any(len(v) > 0 for v in regex_data.values())
-    if has_financial_data:
-        is_scam = True
-        scam_category = "PatternDetected"
+            # regex check on history
+                hist_regex = utils.extract_regex_data(m_text)
+                if any(len(v) > 0 for v in hist_regex.values()):
+                    is_scam = True
+                    scam_category = "HistoricalFinancialPattern"
+                    break
 
-# --- STEP 2: PASSIVE MODE (Safe Messages) ---
+# --- STEP 2: PASSIVE MODE ---
     if not is_scam:
         return {
         "status": "success",
         "reply": "I'm not sure I understand. Can you explain?"
     }, None
+
 
 
     # --- STEP 3: ACTIVATE AGENT ---
