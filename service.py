@@ -29,47 +29,36 @@ def parse_timestamp(ts_input) -> datetime:
         return datetime.now(timezone.utc)
 
 async def process_incoming_message(payload: dict) -> tuple[dict, FinalCallbackPayload | None]:
-    """
-    Core logic: Returns Rule 8 response for the portal 
-    and prepares the Rule 12 callback for the judges.
-    """
-    
     # 1. EXTRACT DATA
     msg_data = payload.get("message", {})
     current_text = msg_data.get("text", "") if isinstance(msg_data, dict) else str(msg_data)
-    current_timestamp = msg_data.get("timestamp", datetime.now(timezone.utc).isoformat())
-
+    
     session_id = payload.get("sessionId", "unknown_session")
     raw_history = payload.get("conversationHistory", [])
     
-# --- STEP 1: SCAM DETECTION ---
+    # --- STEP 1: MULTI-TIER SCAM DETECTION ---
     is_scam, scam_category = utils.detect_scam_keywords(current_text)
 
-# --- STEP 1.1: REGEX DETECTION (current message) ---
+    # Intelligence-based trigger (Pattern Detection)
     regex_data = utils.extract_regex_data(current_text)
     if any(len(v) > 0 for v in regex_data.values()):
         is_scam = True
-        scam_category = "FinancialPattern"
+        scam_category = "Financial Pattern Identified"
 
-# --- STEP 1.2: HISTORY ESCALATION ---
+    # --- STEP 1.2: HISTORY ESCALATION (The Memory Guard) ---
     if not is_scam:
         for msg in raw_history:
             m_sender = msg.get("sender", "") if isinstance(msg, dict) else getattr(msg, "sender", "")
             m_text = msg.get("text", "") if isinstance(msg, dict) else getattr(msg, "text", "")
 
             if m_sender == "scammer":
-            # keyword check
                 was_scam, cat = utils.detect_scam_keywords(m_text)
-                if was_scam:
-                    is_scam = True
-                    scam_category = cat
-                    break
-
-            # regex check on history
                 hist_regex = utils.extract_regex_data(m_text)
-                if any(len(v) > 0 for v in hist_regex.values()):
+                has_hist_intel = any(len(v) > 0 for v in hist_regex.values())
+
+                if was_scam or has_hist_intel:
                     is_scam = True
-                    scam_category = "HistoricalFinancialPattern"
+                    scam_category = cat if was_scam else "Historical Pattern"
                     break
 
 # --- STEP 2: PASSIVE MODE ---

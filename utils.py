@@ -3,7 +3,7 @@ import re
 # --- MASTER SCAM DICTIONARY ---
 SCAM_KEYWORDS = {
     "Financial": ["kyc", "pan card", "block", "suspend", "debit card", "credit card", "reward points", "redeem", "otp", "one time password", "verify", "verification"],
-    "Urgency": ["immediately", "urgent", "24 hours", "today only", "legal action", "police", "arrest", "cbi", "illegal"],
+    "Urgency": ["immediately", "urgent", "24 hours", "today only", "legal action", "arrest", "cbi", "illegal", "call", "now"], # Added call/now
     "Tech": ["apk", "teamviewer", "anydesk", "quicksupport", "screen share"],
     "Utilities": ["electricity", "power", "bill", "disconnect", "connection"],
     "Money": ["lottery", "winner", "refund", "cashback", "prize", "upi", "pay"],
@@ -13,11 +13,10 @@ SCAM_KEYWORDS = {
 # --- SHARPENED PATTERNS ---
 PATTERNS = {
     "upi": r'[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}',
-    # Bank Account: 11-18 digits (standard for most Indian banks)
-    "bank_account": r'\b\d{9,18}\b',
+    # Removed \b to catch numbers even when touching words after normalization
+    "bank_account": r'\d{9,18}', 
     "link": r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+',
-    # Phone: 10 digits starting with 6-9
-    "phone": r'\b[6-9]\d{9}\b'
+    "phone": r'[6-9]\d{9}' 
 }
 
 def detect_scam_keywords(text: str) -> tuple[bool, str]:
@@ -28,9 +27,7 @@ def detect_scam_keywords(text: str) -> tuple[bool, str]:
     return False, "Safe"
 
 def extract_regex_data(text: str) -> dict:
-    """Extracts data using both raw and normalized text to catch obscured numbers."""
-    
-    # 1. Standard extraction (for links and UPIs which usually don't have internal spaces)
+    # 1. Standard extraction for links/UPI
     results = {
         "upiIds": re.findall(PATTERNS["upi"], text),
         "bankAccounts": [],
@@ -38,18 +35,16 @@ def extract_regex_data(text: str) -> dict:
         "phoneNumbers": []
     }
 
-    # 2. Advanced extraction for spaced-out numbers (e.g., "9 8 7 6 5 4 3 2 1 0")
-    # We remove ALL whitespace and hyphens to find hidden sequences
+    # 2. Normalization for obscured numbers
     normalized_text = re.sub(r'[\s\-]', '', text)
     
-    # Extract from normalized text
+    # Extracting without \b boundaries to catch 'Call9876543210now'
     results["bankAccounts"] = re.findall(PATTERNS["bank_account"], normalized_text)
     results["phoneNumbers"] = re.findall(PATTERNS["phone"], normalized_text)
 
     return results
 
 def aggregate_intelligence(history: list, current_text: str) -> dict:
-    """Scans ENTIRE history + current message for mandatory Section 12 callback."""
     aggregated = {
         "bankAccounts": set(),
         "upiIds": set(),
@@ -64,14 +59,11 @@ def aggregate_intelligence(history: list, current_text: str) -> dict:
         aggregated["phishingLinks"].update(data["phishingLinks"])
         aggregated["phoneNumbers"].update(data["phoneNumbers"])
 
-    # Scan History (Scammer messages only)
     for msg in history:
         sender = msg.get("sender", "") if isinstance(msg, dict) else getattr(msg, "sender", "")
         text = msg.get("text", "") if isinstance(msg, dict) else getattr(msg, "text", "")
         if sender == "scammer":
             merge(text)
 
-    # Scan Current Message
     merge(current_text)
-
     return {k: list(v) for k, v in aggregated.items()}
