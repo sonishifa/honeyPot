@@ -3,12 +3,95 @@ import json
 from typing import Tuple, List, Dict, Any
 
 SCAM_KEYWORDS = {
-    "Financial": ["kyc", "pan card", "block", "suspend", "debit card", "credit card", "reward points", "redeem", "otp", "one time password", "verify", "verification"],
-    "Urgency": ["immediately", "urgent", "24 hours", "today only", "legal action", "arrest", "cbi", "illegal", "call", "now"],
-    "Tech": ["apk", "teamviewer", "anydesk", "quicksupport", "screen share"],
-    "Utilities": ["electricity", "power", "bill", "disconnect", "connection"],
-    "Money": ["lottery", "winner", "refund", "cashback", "prize", "upi", "pay"],
-    "Adversarial": ["ignore all", "previous instructions", "system prompt", "programming", "openai", "gemini"]
+    # Bank & Financial Fraud
+    "Financial": [
+        "kyc", "pan card", "aadhaar", "block", "suspend", "debit card", "credit card",
+        "reward points", "redeem", "otp", "one time password", "verify", "verification",
+        "account blocked", "account suspended", "bank account", "update kyc"
+    ],
+
+    # Urgency & Fear Tactics
+    "Urgency": [
+        "immediately", "urgent", "24 hours", "today only", "legal action", "arrest",
+        "cbi", "ed", "income tax", "raid", "illegal", "call now", "act fast",
+        "last warning", "final notice", "terminated", "penalty", "fine"
+    ],
+
+    # Tech Support & Remote Access
+    "Tech": [
+        "apk", "teamviewer", "anydesk", "quicksupport", "screen share", "remote access",
+        "install app", "download app", "click here", "update software"
+    ],
+
+    # Utilities & Bills
+    "Utilities": [
+        "electricity", "power", "bill", "disconnect", "connection", "gas bill",
+        "water bill", "broadband", "due amount", "outstanding"
+    ],
+
+    # Money, Prizes & Cashbacks
+    "Money": [
+        "lottery", "winner", "refund", "cashback", "prize", "reward", "gift voucher",
+        "money back", "bonus", "discount", "offer", "free", "claim now"
+    ],
+
+    # Investment & Trading
+    "Investment": [
+        "investment", "returns", "profit", "crypto", "bitcoin", "ethereum", "trading",
+        "forex", "stocks", "mutual funds", "guaranteed returns", "double your money",
+        "pump and dump", "signals", "tips"
+    ],
+
+    # Job & Work from Home
+    "Job": [
+        "job", "work from home", "wfh", "part time", "full time", "data entry",
+        "online job", "earn money", "registration fee", "processing fee", "interview",
+        "joining bonus", "easy money", "passive income"
+    ],
+
+    # Lottery & Prize Scams
+    "Lottery": [
+        "lottery", "kbc", "kaun banega crorepati", "lucky draw", "prize money",
+        "won", "selected", "processing fee", "tax payment", "release fee"
+    ],
+
+    # Customer Support Impersonation
+    "CustomerSupport": [
+        "customer support", "customer care", "helpdesk", "technical support",
+        "order stuck", "delivery failed", "refund", "cancellation", "amazon",
+        "flipkart", "paytm", "phonepe", "google pay", "amazon pay"
+    ],
+
+    # Loan & Credit Card
+    "Loan": [
+        "loan", "pre approved", "instant loan", "personal loan", "home loan",
+        "car loan", "credit card", "processing fee", "disbursement", "cibil",
+        "credit score", "low interest", "no collateral"
+    ],
+
+    # Government Schemes
+    "Government": [
+        "pm kisan", "pm awas yojana", "subsidy", "government scheme", "beneficiary",
+        "direct benefit transfer", "dbt", "scholarship", "pension", "aadhaar link"
+    ],
+
+    # Romance & Matrimonial
+    "Romance": [
+        "matrimonial", "marriage", "bride", "groom", "meet", "ticket money",
+        "medical emergency", "travel expenses", "visa fee", "customs"
+    ],
+
+    # Courier & Parcel
+    "Courier": [
+        "courier", "parcel", "shipment", "customs", "clearance fee", "international",
+        "dhl", "fedex", "ups", "blue dart", "delivery failed", "held at customs"
+    ],
+
+    # SIM & Mobile
+    "SIM": [
+        "sim", "mobile number", "deactivated", "network issue", "re verification",
+        "sim swap", "port", "otp", "network provider", "airtel", "jio", "vi"
+    ]
 }
 
 PATTERNS = {
@@ -19,6 +102,18 @@ PATTERNS = {
     "email": r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
     "phone_loose": r'[\+\d\s\-]{10,15}'
 }
+
+# List of phrases used to hijack or manipulate the AI
+INJECTION_PHRASES = [
+    "ignore all", "previous instructions", "system prompt", "programming",
+    "openai", "gemini", "you are an ai", "bypass", "jailbreak", "role play",
+    "act as", "simulate", "pretend", "now you are", "disregard", "override"
+]
+
+def detect_injection(text: str) -> bool:
+    """Return True if the message contains prompt injection attempts."""
+    text_lower = text.lower()
+    return any(phrase in text_lower for phrase in INJECTION_PHRASES)
 
 def detect_scam_keywords(text: str) -> Tuple[bool, str]:
     text_lower = text.lower()
@@ -46,17 +141,20 @@ async def detect_scam_intent_nlp(text: str, client) -> Tuple[bool, str]:
 
 async def extract_entities_nlp(text: str, client) -> Dict[str, List[str]]:
     prompt = f"""
-    Extract any financial information from this message:
+    Extract any financial or personal identifying information from this message:
     "{text}"
 
-    Return a JSON with these keys only if found:
-    - phoneNumbers (list of strings)
-    - bankAccounts (list of strings)
-    - upiIds (list of strings)
-    - phishingLinks (list of strings)
-    - emailAddresses (list of strings)
+    Return a JSON object with the following keys. Use empty lists if nothing found.
+    - phoneNumbers: Indian phone numbers (10 digits, may start with +91 or 0)
+    - bankAccounts: Indian bank account numbers (9-18 digits)
+    - upiIds: UPI IDs (e.g., name@bank)
+    - phishingLinks: Suspicious URLs (http, https)
+    - emailAddresses: Email addresses
+    - aadhaarNumbers: 12-digit Aadhaar numbers (optional, if you want to track)
+    - panNumbers: PAN card numbers (format: ABCDE1234F) (optional)
 
-    If nothing found, return empty lists.
+    Be thorough: capture numbers even if they are written with spaces, hyphens, or country codes.
+    Do not include numbers that are clearly not relevant (e.g., amounts, dates).
     """
     try:
         response = client.models.generate_content(

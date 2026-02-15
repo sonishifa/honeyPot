@@ -10,7 +10,7 @@ CALLBACK_URL = os.getenv("CALLBACK_URL")  # May be None
 async def send_callback_async(payload: dict):
     """Send final output to callback URL in a thread to avoid blocking."""
     if not CALLBACK_URL:
-        print("⚠️ No CALLBACK_URL set, skipping callback.")
+        print(" No CALLBACK_URL set, skipping callback.")
         return
     try:
         # Run the blocking POST in a thread
@@ -29,7 +29,7 @@ async def delayed_callback(session_id: str, payload: dict, delay: int = 10):
             session.callback_sent = True
     except asyncio.CancelledError:
         # Task was cancelled because a new message arrived – do nothing
-        print(f"⏸️ Callback cancelled for session {session_id}")
+        print(f"Callback cancelled for session {session_id}")
         raise
 
 async def process_incoming_message(payload: dict) -> tuple[dict, None]:
@@ -44,6 +44,11 @@ async def process_incoming_message(payload: dict) -> tuple[dict, None]:
     session = get_session(session_id)
     session.update_timestamp()
     session.turn_count += 1
+
+    if utils.detect_injection(current_text):
+        print(f" Injection attempt detected in session {session_id}")
+        # Return a generic safe reply – do NOT activate agent or run detection
+        return {"status": "success", "reply": "I'm not sure I understand. Can you explain normally?"}, None
 
     # --- 3-TIER SCAM DETECTION ---
     is_scam = False
@@ -128,7 +133,7 @@ async def process_incoming_message(payload: dict) -> tuple[dict, None]:
             task = asyncio.create_task(delayed_callback(session_id, final_output, 10))
             session.pending_callback_task = task
         else:
-            print(f"ℹ️ No CALLBACK_URL set for session {session_id}. Final output stored for GET.")
+            print(f" No CALLBACK_URL set for session {session_id}. Final output stored for GET.")
     else:
         # Not yet ready – do nothing
         pass
