@@ -150,8 +150,6 @@ async def extract_entities_nlp(text: str, client) -> Dict[str, List[str]]:
     - upiIds: UPI IDs (e.g., name@bank)
     - phishingLinks: Suspicious URLs (http, https)
     - emailAddresses: Email addresses
-    - aadhaarNumbers: 12-digit Aadhaar numbers (optional, if you want to track)
-    - panNumbers: PAN card numbers (format: ABCDE1234F) (optional)
 
     Be thorough: capture numbers even if they are written with spaces, hyphens, or country codes.
     Do not include numbers that are clearly not relevant (e.g., amounts, dates).
@@ -176,18 +174,27 @@ def extract_regex_data(text: str) -> Dict[str, List[str]]:
     }
 
     normalized_text = re.sub(r'[\s\-]', '', text)
-    # After extracting both, remove phone numbers from bankAccounts
-    results["bankAccounts"] = [acc for acc in results["bankAccounts"] if acc not in results["phoneNumbers"]]
 
+    # Bank accounts from normalized text
+    results["bankAccounts"] = re.findall(PATTERNS["bank_account"], normalized_text)
+
+    # Phone numbers: loose capture + normalization
     loose_phones = re.findall(PATTERNS["phone_loose"], text)
     for p in loose_phones:
         clean = re.sub(r'[\s\-]', '', p)
         if re.fullmatch(r'[6-9]\d{9}', clean) or re.fullmatch(r'\+91[6-9]\d{9}', clean):
             results["phoneNumbers"].append(clean)
 
+    # Also scan normalized text for strict phone pattern
     results["phoneNumbers"].extend(re.findall(PATTERNS["phone"], normalized_text))
+
+    # Deduplicate all lists
     for k in results:
         results[k] = list(set(results[k]))
+
+    # Remove phone numbers from bankAccounts (if any)
+    results["bankAccounts"] = [acc for acc in results["bankAccounts"] if acc not in results["phoneNumbers"]]
+
     return results
 
 def aggregate_intelligence(history: list, current_text: str) -> Dict[str, List[str]]:
