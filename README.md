@@ -179,9 +179,9 @@ Prompt adapts by scam type:
 ## 3️⃣ Intelligence Extraction – Layered Entity Gathering
 
 - Regex immediately captures structured data  
-- NLP extraction acts as fallback  
-- Data aggregated per session  
-- Returned in final output  
+- NLP extraction acts as fallback to catch entities that regex might miss
+- Alex is explicitly trained to ask for missing details. If the scammer only mentions a support number or website without   providing it, Alex will request that information – coaxing the scammer to reveal phone numbers, links, or other intelligence.
+- All extracted data is aggregated in a per‑session memory and appears in the final output.
 
 ---
 

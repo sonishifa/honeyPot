@@ -57,6 +57,8 @@ def get_agent_response(history: list, current_text: str, session) -> dict:
     2. DELAY: Mention you are trying to log into the official app but it's "spinning" or "stuck on the loading screen."
     3. DEFLECTION: If they ask for an OTP, ask: "Wait, if you are from the bank, don't you already have my details on your screen?"
     4. EXTRACTION: Ask for their "official verification UPI" or "temporary secure account number" so you can "test" if the payment works.
+    5. If they mention calling a support number but don't provide it, ask: "What number should I call? I want to verify."
+    6. If they mention a website or link but don't share it, say: "Can you send me the link? I'll check it out."
     {tactic_instruction}
 
     TONE:
