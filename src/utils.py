@@ -4,7 +4,7 @@ import logging
 import asyncio
 import random
 from typing import Tuple, List, Dict, Any
-from groq import Groq
+from google import genai
 from src.key_manager import key_manager
 
 # Set up logging
@@ -138,7 +138,8 @@ def detect_scam_keywords(text: str) -> Tuple[bool, str]:
 
 async def detect_scam_intent_nlp(text: str) -> Tuple[bool, str]:
     """
-    Use Gemini to detect scam intent. Retries with different keys on 429.
+    Use Gemini 2.5 Flash Lite to detect scam intent.
+    Retries with different keys on 429.
     Returns (is_scam, category).
     """
     prompt = f"""
@@ -154,13 +155,10 @@ async def detect_scam_intent_nlp(text: str) -> Tuple[bool, str]:
     Return ONLY a JSON object with these fields:
     {{"is_scam": true/false, "category": "ShortLabel"}}
     """
-    
     max_attempts = min(key_manager.total_keys, 5)
-    
     for attempt in range(max_attempts):
         key = key_manager.get_key()
         temp_client = genai.Client(api_key=key)
-        
         try:
             response = await asyncio.to_thread(
                 temp_client.models.generate_content,
@@ -168,33 +166,27 @@ async def detect_scam_intent_nlp(text: str) -> Tuple[bool, str]:
                 contents=prompt,
                 config={'response_mime_type': 'application/json', 'temperature': 0.2}
             )
-            
             if not response.text:
                 raise ValueError("Empty response from Gemini")
-                
             data = json.loads(response.text)
             logger.info(f"NLP detection: {data}")
             return data.get("is_scam", False), data.get("category", "Safe")
-            
         except Exception as e:
             error_str = str(e)
             logger.warning(f"NLP detection attempt {attempt + 1}/{max_attempts} failed (key {key[:8]}...): {error_str}")
-            
-            if "429" in error_str or "quota" in error_str.lower():
-                # Extract retry delay if present
+            if "429" in error_str or "quota" in error_str.lower() or "rate" in error_str.lower():
                 match = re.search(r'retryDelay["\']:\s*"?(\d+)', error_str)
                 delay = int(match.group(1)) if match else 60
                 key_manager.mark_exhausted(key, retry_after=delay)
-                continue  # Try next key
+                continue
             else:
-                break  # Non-rate-limit error, don't retry
-                
+                break
     return False, "Safe"
 
 
 async def extract_entities_nlp(text: str) -> Dict[str, List[str]]:
     """
-    Extract financial/personal entities using Gemini.
+    Extract financial/personal entities using Gemini 2.5 Flash Lite.
     Retries with different keys on 429.
     """
     prompt = f"""
@@ -216,13 +208,10 @@ async def extract_entities_nlp(text: str) -> Dict[str, List[str]]:
     Be thorough: capture ALL identifying information exactly as written.
     Do not include numbers that are clearly not relevant (e.g., amounts, dates).
     """
-    
     max_attempts = min(key_manager.total_keys, 5)
-    
     for attempt in range(max_attempts):
         key = key_manager.get_key()
         temp_client = genai.Client(api_key=key)
-        
         try:
             response = await asyncio.to_thread(
                 temp_client.models.generate_content,
@@ -230,24 +219,19 @@ async def extract_entities_nlp(text: str) -> Dict[str, List[str]]:
                 contents=prompt,
                 config={'response_mime_type': 'application/json', 'temperature': 0.2}
             )
-            
             if not response.text:
                 raise ValueError("Empty response from Gemini")
-                
             return json.loads(response.text)
-            
         except Exception as e:
             error_str = str(e)
             logger.warning(f"NLP extraction attempt {attempt + 1}/{max_attempts} failed (key {key[:8]}...): {error_str}")
-            
-            if "429" in error_str or "quota" in error_str.lower():
+            if "429" in error_str or "quota" in error_str.lower() or "rate" in error_str.lower():
                 match = re.search(r'retryDelay["\']:\s*"?(\d+)', error_str)
                 delay = int(match.group(1)) if match else 60
                 key_manager.mark_exhausted(key, retry_after=delay)
                 continue
             else:
                 break
-                
     return {}
 
 

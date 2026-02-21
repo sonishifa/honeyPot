@@ -1,4 +1,5 @@
-from groq import Groq
+from google import genai
+from google.genai import types
 import json
 import re
 import logging
@@ -14,7 +15,7 @@ def clean_json_string(text):
 
 def get_agent_response(history: list, current_text: str, session) -> dict:
     """
-    Generate a honeypot agent response using Groq (Llama 3.1 8B).
+    Generate a honeypot agent response using Gemini 2.5 Flash Lite.
     Retries with different API keys on 429 errors (capped at total_keys attempts).
     """
     # Format history
@@ -78,33 +79,30 @@ def get_agent_response(history: list, current_text: str, session) -> dict:
     """
 
     # Retry with different keys on 429 — capped at total keys to avoid infinite loop
-    max_attempts = min(key_manager.total_keys, 4)
+    max_attempts = min(key_manager.total_keys, 5)
     last_error = None
 
     for attempt in range(max_attempts):
         key = key_manager.get_key()
         temp_client = genai.Client(api_key=key)
         try:
-            response = temp_client.chat.completions.create(
-                model="gemini-2.5-flash-lite",
-                messages=[
-                    {"role": "system", "content": "You are Alex, a cautious bank customer."},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.4,
-                max_tokens=300,
-                response_format={"type": "json_object"}
+            response = temp_client.models.generate_content(
+                model='gemini-2.5-flash-lite',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type='application/json',
+                    temperature=0.4,
+                    max_output_tokens=300
+                )
             )
-            content = response.choices[0].message.content
-            if not content:
-                raise ValueError("Empty response from Groq")
-            return json.loads(clean_json_string(content))
+            if not response.text:
+                raise ValueError("Empty response from Gemini")
+            return json.loads(clean_json_string(response.text))
         except Exception as e:
             last_error = e
             error_str = str(e)
             logger.warning(f"Agent attempt {attempt + 1}/{max_attempts} failed (key {key[:8]}...): {error_str}")
-            if "429" in error_str or "quota" in error_str.lower():
-                # Extract retry delay if present (Groq may not provide it)
+            if "429" in error_str or "quota" in error_str.lower() or "rate" in error_str.lower():
                 match = re.search(r'retryDelay["\']:\s*"?(\d+)', error_str)
                 delay = int(match.group(1)) if match else 60
                 key_manager.mark_exhausted(key, retry_after=delay)
@@ -112,7 +110,7 @@ def get_agent_response(history: list, current_text: str, session) -> dict:
             else:
                 break  # Non-rate-limit error, don't retry
 
-    # All keys failed — return fallback (generic, not scenario‑specific)
+    # All keys failed — return fallback (generic, not scenario-specific)
     logger.error(f"Agent failed after {max_attempts} attempts: {last_error}")
     return {
         "reply": "I'm not comfortable with this. Can you provide some verification?",

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class KeyManager:
-    """Manages multiple Groq API keys with rate-limit aware rotation."""
+    """Manages multiple Gemini API keys with rate-limit aware rotation."""
 
     def __init__(self):
         raw = os.getenv("GEMINI_API_KEY", "")
