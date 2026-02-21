@@ -12,8 +12,7 @@ An AI-powered **agentic honeypot** that detects scam messages, engages fraudster
 - Email Addresses  
 
 The system uses a **three-layer detection pipeline** (Keywords → Regex → NLP) and a **dual-mode output system**:
-- Background callback after idle timeout  
-- GET endpoint for manual retrieval  
+ 
 
 ---
 
@@ -63,7 +62,6 @@ Copy `.env.example` to `.env` and configure:
 ```
 GEMINI_API_KEY=your_google_gemini_api_key
 SCAMMER_API_KEY=your_secret_api_key_for_authentication
-CALLBACK_URL=   # optional – final output POSTed here after 10s inactivity
 ```
 
 ## 4️⃣ Run the Application
@@ -118,18 +116,6 @@ x-api-key: SCAMMER_API_KEY
   "reply": "Why would my account be blocked? I just used the app this morning."
 }
 ```
-
----
-
-# 📊 Retrieving Final Output (Mode B)
-
-After 10 seconds of inactivity:
-
-```bash
-GET https://your-deployed-url.com/final/{sessionId}
-```
-
-Requires the same `x-api-key` header.
 
 ---
 
@@ -203,19 +189,9 @@ If no intelligence:
 
 ---
 
-### 🔄 Dual-Mode Delivery
+### 🔄 Delivery
 
-**Mode A – Push**
-- If `CALLBACK_URL` is set
-- Final output POSTed automatically
-
-**Mode B – Pull**
-- Stored in memory
-- Retrieved via:
-```
-GET /final/{sessionId}
-```
-
+- Final output sent to the session log
 ---
 
 ## 5️⃣ Security & Robustness

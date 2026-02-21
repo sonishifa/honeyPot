@@ -83,10 +83,10 @@ def get_agent_response(history: list, current_text: str, session) -> dict:
 
     for attempt in range(max_attempts):
         key = key_manager.get_key()
-        temp_client = Groq(api_key=key)
+        temp_client = genai.Client(api_key=key)
         try:
             response = temp_client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="gemini-2.5-flash-lite",
                 messages=[
                     {"role": "system", "content": "You are Alex, a cautious bank customer."},
                     {"role": "user", "content": prompt}
